@@ -1,6 +1,6 @@
 {
   "project.name" : "javelin",
-  "phabricator.uri" : "https://secure.phabricator.com/",
+  "phabricator.uri" : "https://aitsys.dev/",
   "load" : [
     "support/diviner"
   ]
