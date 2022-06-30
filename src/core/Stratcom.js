@@ -155,11 +155,6 @@ JX.install('Stratcom', {
             'JX.Stratcom.listen(...): '+
             'requires exactly 3 arguments. Did you mean JX.DOM.listen?');
         }
-        if (arguments.length != 3) {
-          JX.$E(
-            'JX.Stratcom.listen(...): '+
-            'requires exactly 3 arguments.');
-        }
         if (typeof func != 'function') {
           JX.$E(
             'JX.Stratcom.listen(...): '+
@@ -320,6 +315,11 @@ JX.install('Stratcom', {
           }
         }
 
+        var auto_id = cursor.getAttribute('data-autoid');
+        if (auto_id) {
+          push('autoid:' + auto_id, cursor, distance);
+        }
+
         ++distance;
         cursor = cursor.parentNode;
       }
@@ -333,6 +333,7 @@ JX.install('Stratcom', {
 
       var proxy = new JX.Event()
         .setRawEvent(event)
+        .setData(event.customData)
         .setType(etype)
         .setTarget(target)
         .setNodes(nodes)
@@ -587,6 +588,12 @@ JX.install('Stratcom', {
         var index = meta_id[1];
         if (block && (index in block)) {
           return block[index];
+        } else if (__DEV__) {
+          JX.$E(
+            'JX.Stratcom.getData(<node>): Tried to access data (block ' +
+            meta_id[0] + ', index ' + index + ') that was not present. This ' +
+            'probably means you are calling getData() before the block ' +
+            'is provided by mergeData().');
         }
       }
 

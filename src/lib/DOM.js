@@ -87,7 +87,18 @@ JX.$ = function(id) {
 JX.install('HTML', {
 
   construct : function(str) {
+    if (str instanceof JX.HTML) {
+      this._content = str._content;
+      return;
+    }
+
     if (__DEV__) {
+      if ((typeof str !== 'string') && (!str || !str.match)) {
+        JX.$E(
+          'new JX.HTML(<empty?>): ' +
+          'call initializes an HTML object with an empty value.');
+      }
+
       var tags = ['legend', 'thead', 'tbody', 'tfoot', 'column', 'colgroup',
                   'caption', 'tr', 'th', 'td', 'option'];
       var evil_stuff = new RegExp('^\\s*<(' + tags.join('|') + ')\\b', 'i');
@@ -311,6 +322,7 @@ JX.$N = function(tag, attr, content) {
 JX.install('DOM', {
   statics : {
     _autoid : 0,
+    _uniqid : 0,
     _metrics : {},
 
 
@@ -536,7 +548,8 @@ JX.install('DOM', {
         var type = elements[ii].type;
         var tag  = elements[ii].tagName;
         if ((type in {radio: 1, checkbox: 1} && elements[ii].checked) ||
-             type in {text: 1, hidden: 1, password: 1, email: 1} ||
+             type in {text: 1, hidden: 1, password: 1, email: 1, tel: 1,
+                      number: 1} ||
              tag in {TEXTAREA: 1, SELECT: 1}) {
           data.push([elements[ii].name, elements[ii].value]);
         }
@@ -624,35 +637,52 @@ JX.install('DOM', {
      *                    method.
      */
     listen : function(node, type, path, callback) {
-      if (__DEV__) {
-        var types = JX.$AX(type);
-        for (var ix = 0; ix < types.length; ix++) {
-          var t = types[ix];
-
-          if (!(t in JX.__allowedEvents)) {
-            JX.$E(
-              'JX.DOM.listen(...): ' +
-              'can only listen to events registered in init.js. "' +
-               t + '" not found.');
-          }
-        }
-      }
-
-      var id = ['id:' + JX.DOM.uniqID(node)];
+      var auto_id = ['autoid:' + JX.DOM._getAutoID(node)];
       path = JX.$AX(path || []);
       if (!path.length) {
-        path = id;
+        path = auto_id;
       } else {
         for (var ii = 0; ii < path.length; ii++) {
-          path[ii] = id.concat(JX.$AX(path[ii]));
+          path[ii] = auto_id.concat(JX.$AX(path[ii]));
         }
       }
       return JX.Stratcom.listen(type, path, callback);
     },
 
+
+    /**
+     * Invoke a custom event on a node. This method is a companion to
+     * @{method:JX.DOM.listen} and parallels @{method:JX.Stratcom.invoke} in
+     * the same way that method parallels @{method:JX.Stratcom.listen}.
+     *
+     * This method can not be used to invoke native events (like 'click').
+     *
+     * @param Node      The node to invoke an event on.
+     * @param string    Custom event type.
+     * @param dict      Event data.
+     * @return JX.Event The event object which was dispatched to listeners.
+     *                  The main use of this is to test whether any
+     *                  listeners prevented the event.
+     */
+    invoke : function(node, type, data) {
+      if (__DEV__) {
+        if (type in JX.__allowedEvents) {
+          throw new Error(
+            'JX.DOM.invoke(..., "' + type + '", ...): ' +
+            'you cannot invoke with the same type as a native event.');
+        }
+      }
+      return JX.Stratcom.dispatch({
+        target: node,
+        type: type,
+        customData: data
+      });
+    },
+
+
     uniqID : function(node) {
       if (!node.getAttribute('id')) {
-        node.setAttribute('id', 'autoid_'+(++JX.DOM._autoid));
+        node.setAttribute('id', 'uniqid_'+(++JX.DOM._uniqid));
       }
       return node.getAttribute('id');
     },
@@ -687,8 +717,8 @@ JX.install('DOM', {
 
     /**
      * Show one or more elements, by removing their "display" style. This
-     * assumes you have hidden them with hide(), or explicitly set the style
-     * to "display: none;".
+     * assumes you have hidden them with @{method:hide}, or explicitly set
+     * the style to `display: none;`.
      *
      * @task convenience
      * @param ... One or more nodes to remove "display" styles from.
@@ -712,8 +742,8 @@ JX.install('DOM', {
 
 
     /**
-     * Hide one or more elements, by setting "display: none;" on them. This is
-     * a convenience method. See also show().
+     * Hide one or more elements, by setting `display: none;` on them. This is
+     * a convenience method. See also @{method:show}.
      *
      * @task convenience
      * @param ... One or more nodes to set "display: none" on.
@@ -744,11 +774,11 @@ JX.install('DOM', {
       }
       var proxy = this._metrics[pseudoclass];
       document.body.appendChild(proxy);
-        proxy.style.width = x ? (x+'px') : '';
-        JX.DOM.setContent(
-          proxy,
-          JX.$H(JX.DOM.htmlize(node.value).replace(/\n/g, '<br />')));
-        var metrics = JX.Vector.getDim(proxy);
+      proxy.style.width = x ? (x+'px') : '';
+      JX.DOM.setContent(
+        proxy,
+        JX.$H(JX.DOM.htmlize(node.value).replace(/\n/g, '<br />')));
+      var metrics = JX.Vector.getDim(proxy);
       document.body.removeChild(proxy);
       return metrics;
     },
@@ -849,9 +879,15 @@ JX.install('DOM', {
      * @param Node Node to move document scroll position to, if possible.
      * @return void
      */
-     scrollTo : function(node) {
-       window.scrollTo(0, JX.$V(node).y);
-     }
+    scrollTo : function(node) {
+      window.scrollTo(0, JX.$V(node).y);
+    },
+
+    _getAutoID : function(node) {
+      if (!node.getAttribute('data-autoid')) {
+        node.setAttribute('data-autoid', 'autoid_'+(++JX.DOM._autoid));
+      }
+      return node.getAttribute('data-autoid');
+    }
   }
 });
-

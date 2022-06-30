@@ -15,6 +15,7 @@ JX.install('TypeaheadSource', {
     this._raw = {};
     this._lookup = {};
     this.setNormalizer(JX.TypeaheadNormalizer.normalize);
+    this._excludeIDs = {};
   },
 
   events : ['waiting', 'resultsready', 'complete'],
@@ -54,8 +55,15 @@ JX.install('TypeaheadSource', {
      *    - **name**: the string used for matching against user input.
      *    - **uri**: the URI corresponding with the object (must be present
      *      but need not be meaningful)
+     *
+     * You can also give:
      *    - **display**: the text or nodes to show in the DOM. Usually just the
      *      same as ##name##.
+     *    - **tokenizable**: if you want to tokenize something other than the
+     *      ##name##, for the typeahead to complete on, specify it here.  A
+     *      selected entry from the typeahead will still insert the ##name##
+     *      into the input, but the ##tokenizable## field lets you complete on
+     *      non-name things.
      *
      * The default transformer expects a three element list with elements
      * [name, uri, id]. It assigns the first element to both ##name## and
@@ -71,17 +79,61 @@ JX.install('TypeaheadSource', {
      *
      * @param int
      */
-    maximumResultCount : 5
+    maximumResultCount : 5,
+
+    /**
+     * Optional function which is used to sort results. Inputs are the input
+     * string, the list of matches, and a default comparator. The function
+     * should sort the list for display. This is the minimum useful
+     * implementation:
+     *
+     *   function(value, list, comparator) {
+     *     list.sort(comparator);
+     *   }
+     *
+     * Alternatively, you may pursue more creative implementations.
+     *
+     * The `value` is a raw string; you can bind the datasource into the
+     * function and use normalize() or tokenize() to parse it.
+     *
+     * The `list` is a list of objects returned from the transformer function,
+     * see the `transformer` property. These are the objects in the list which
+     * match the value.
+     *
+     * The `comparator` is a sort callback which implements sensible default
+     * sorting rules (e.g., alphabetic order), which you can use as a fallback
+     * if you just want to tweak the results (e.g., put some items at the top).
+     *
+     * The function is called after the user types some text, immediately before
+     * the possible completion results are displayed to the user.
+     *
+     * @param function
+     */
+    sortHandler : null
 
   },
 
   members : {
     _raw : null,
     _lookup : null,
+    _excludeIDs : null,
+    _changeListener : null,
+    _startListener : null,
 
     bindToTypeahead : function(typeahead) {
-      typeahead.listen('change', JX.bind(this, this.didChange));
-      typeahead.listen('start', JX.bind(this, this.didStart));
+      this._changeListener = typeahead.listen(
+        'change',
+        JX.bind(this, this.didChange)
+      );
+      this._startListener = typeahead.listen(
+        'start',
+        JX.bind(this, this.didStart)
+      );
+    },
+
+    unbindFromTypeahead : function() {
+      this._changeListener.remove();
+      this._startListener.remove();
     },
 
     didChange : function(value) {
@@ -95,6 +147,18 @@ JX.install('TypeaheadSource', {
     clearCache : function() {
       this._raw = {};
       this._lookup = {};
+    },
+
+    addExcludeID : function(id) {
+      if (id) {
+        this._excludeIDs[id] = true;
+      }
+    },
+
+    removeExcludeID : function (id) {
+      if (id) {
+        delete this._excludeIDs[id];
+      }
     },
 
     addResult : function(obj) {
@@ -119,7 +183,7 @@ JX.install('TypeaheadSource', {
       }
 
       this._raw[obj.id] = obj;
-      var t = this.tokenize(obj.name);
+      var t = this.tokenize(obj.tokenizable || obj.name);
       for (var jj = 0; jj < t.length; ++jj) {
         this._lookup[t[jj]] = this._lookup[t[jj]] || [];
         this._lookup[t[jj]].push(obj.id);
@@ -130,6 +194,20 @@ JX.install('TypeaheadSource', {
       this.invoke('waiting');
       return this;
     },
+
+
+    /**
+     * Get the raw state of a result by its ID. A number of other events and
+     * mechanisms give a list of result IDs and limited additional data; if you
+     * need to act on the full result data you can look it up here.
+     *
+     * @param scalar Result ID.
+     * @return dict Corresponding raw result.
+     */
+    getResult : function(id) {
+      return this._raw[id];
+    },
+
 
     matchResults : function(value) {
 
@@ -190,14 +268,40 @@ JX.install('TypeaheadSource', {
 
       var hits = [];
       for (var k in match_count) {
-        if (match_count[k] == t.length) {
+        if (match_count[k] == t.length && !this._excludeIDs[k]) {
           hits.push(k);
         }
       }
 
+      this.sortHits(value, hits);
+
       var nodes = this.renderNodes(value, hits);
       this.invoke('resultsready', nodes);
       this.invoke('complete');
+    },
+
+    sortHits : function(value, hits) {
+      var objs = [];
+      for (var ii = 0; ii < hits.length; ii++) {
+        objs.push(this._raw[hits[ii]]);
+      }
+
+       var default_comparator = function(u, v) {
+         var key_u = u.sort || u.name;
+         var key_v = v.sort || v.name;
+         return key_u.localeCompare(key_v);
+      };
+
+      var handler = this.getSortHandler() || function(value, list, cmp) {
+        list.sort(cmp);
+      };
+
+      handler(value, objs, default_comparator);
+
+      hits.splice(0, hits.length);
+      for (var ii = 0; ii < objs.length; ii++) {
+        hits.push(objs[ii].id);
+      }
     },
 
     renderNodes : function(value, hits) {
@@ -213,6 +317,7 @@ JX.install('TypeaheadSource', {
       return JX.$N(
         'a',
         {
+          sigil: 'typeahead-result',
           href: data.uri,
           name: data.name,
           rel: data.id,
@@ -230,7 +335,7 @@ JX.install('TypeaheadSource', {
       if (!str.length) {
         return [];
       }
-      return str.split(/ /g);
+      return str.split(/\s/g);
     },
     _defaultTransformer : function(object) {
       return {
@@ -242,5 +347,3 @@ JX.install('TypeaheadSource', {
     }
   }
 });
-
-

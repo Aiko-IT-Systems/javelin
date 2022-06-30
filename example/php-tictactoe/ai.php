@@ -1,6 +1,6 @@
 <?php
 
-require_once '../../support/php/Javelin.php';
+require_once '../../support/php/JavelinHelper.php';
 
 $game = json_decode($_REQUEST['game']);
 
@@ -26,7 +26,7 @@ if (check_win($game, 'X')) {
   }
 }
 
-echo Javelin::renderAjaxResponse($response);
+echo JavelinHelper::renderAjaxResponse($response);
 
 function check_win($game, $player) {
   static $wins = array(
@@ -57,5 +57,3 @@ function check_win($game, $player) {
 
   return false;
 }
-
-

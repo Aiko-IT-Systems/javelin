@@ -123,6 +123,7 @@
 
   var document_events = [
     'click',
+    'dblclick',
     'change',
     'submit',
     'keypress',
@@ -137,6 +138,7 @@
     'dragenter',
     'dragleave',
     'dragover',
+    'paste',
     'touchstart',
     'touchmove',
     'touchend',
@@ -172,6 +174,7 @@
   var window_events = [
     ('onpagehide' in window) ? 'pagehide' : 'unload',
     'resize',
+    'scroll',
     'focus',
     'blur',
     'popstate',
@@ -203,10 +206,11 @@
         "JX.__rawEventQueue({type: 'domready'});" +
       "}";
 
+    // NOTE: Don't write a 'src' attribute, because "javascript:void(0)" causes
+    // a mixed content warning in IE8 if the page is served over SSL.
     document.write(
       '<script' +
       ' defer="defer"' +
-      ' src="javascript:void(0)"' +
       ' onreadystatechange="' + ready + '"' +
       '><\/sc' + 'ript\>');
   }

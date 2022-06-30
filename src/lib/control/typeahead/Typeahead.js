@@ -85,8 +85,9 @@ JX.install('Typeahead', {
       'mousedown',
       'tag:a',
       JX.bind(this, function(e) {
-        this._choose(e.getNode('tag:a'));
-        e.prevent();
+        if (!e.isRightButton()) {
+          this._choose(e.getNode('tag:a'));
+        }
       }));
 
   },
@@ -116,8 +117,13 @@ JX.install('Typeahead', {
     _value : null,
     _stop : false,
     _focus : -1,
+    _focused : false,
+    _placeholderVisible : false,
+    _placeholder : null,
     _display : null,
     _datasource : null,
+    _waitingListener : null,
+    _readyListener : null,
 
     /**
      * Activate your properly configured typeahead. It won't do anything until
@@ -136,6 +142,7 @@ JX.install('Typeahead', {
             "setDatasource().");
         }
       }
+      this.updatePlaceholder();
     },
 
 
@@ -149,17 +156,25 @@ JX.install('Typeahead', {
      *                               draw from.
      */
     setDatasource : function(datasource) {
-      if (__DEV__) {
-        if (this._datasource) {
-          throw new Error(
-            "JX.Typeahead.setDatasource(): " +
-            "Typeahead already has a datasource.");
-        }
+      if (this._datasource) {
+        this._datasource.unbindFromTypeahead();
+        this._waitingListener.remove();
+        this._readyListener.remove();
       }
-      datasource.listen('waiting', JX.bind(this, this.waitForResults));
-      datasource.listen('resultsready', JX.bind(this, this.showResults));
+      this._waitingListener = datasource.listen(
+        'waiting',
+        JX.bind(this, this.waitForResults)
+      );
+      this._readyListener = datasource.listen(
+        'resultsready',
+        JX.bind(this, this.showResults)
+      );
       datasource.bindToTypeahead(this);
       this._datasource = datasource;
+    },
+
+    getDatasource : function() {
+      return this._datasource;
     },
 
     /**
@@ -202,10 +217,14 @@ JX.install('Typeahead', {
     showResults : function(results) {
       var obj = {show: results};
       var e = this.invoke('show', obj);
-      this._display = obj.show;
+
+      // Note that the results list may have been update by the "show" event
+      // listener. Non-result node (e.g. divider or label) may have been
+      // inserted.
+      JX.DOM.setContent(this._root, results);
+      this._display = JX.DOM.scry(this._root, 'a', 'typeahead-result');
 
       if (this._display.length && !e.getPrevented()) {
-        JX.DOM.setContent(this._root, this._display);
         this._changeFocus(Number.NEGATIVE_INFINITY);
         var d = JX.Vector.getDim(this._hardpoint);
         d.x = 0;
@@ -216,6 +235,7 @@ JX.install('Typeahead', {
         JX.DOM.show(this._root);
       } else {
         this.hide();
+        JX.DOM.setContent(this._root, null);
       }
     },
 
@@ -297,7 +317,17 @@ JX.install('Typeahead', {
      */
     clear : function() {
       this._control.value = '';
+      this._value = '';
       this.hide();
+    },
+
+
+    /**
+     * @task control
+     */
+    enable : function() {
+      this._control.disabled = false;
+      this._stop = false;
     },
 
 
@@ -339,7 +369,13 @@ JX.install('Typeahead', {
      * @task internal
      */
     _update : function(event) {
-      var k = event && event.getSpecialKey();
+
+      if (event.getType() == 'focus') {
+        this._focused = true;
+        this.updatePlaceholder();
+      }
+
+      var k = event.getSpecialKey();
       if (k && event.getType() == 'keydown') {
         switch (k) {
           case 'up':
@@ -398,6 +434,8 @@ JX.install('Typeahead', {
       }
       var type = e.getType();
       if (type == 'blur') {
+        this._focused = false;
+        this.updatePlaceholder();
         this.hide();
       } else {
         this._update(e);
@@ -408,6 +446,62 @@ JX.install('Typeahead', {
       if (this._listener) {
         this._listener.remove();
       }
+    },
+
+
+    /**
+     * Set a string to display in the control when it is not focused, like
+     * "Type a user's name...". This string hints to the user how to use the
+     * control.
+     *
+     * When the string is displayed, the input will have class
+     * "jx-typeahead-placeholder".
+     *
+     * @param string Placeholder string, or null for no placeholder.
+     * @return this
+     *
+     * @task config
+     */
+    setPlaceholder : function(string) {
+      this._placeholder = string;
+      this.updatePlaceholder();
+      return this;
+    },
+
+
+    /**
+     * Update the control to either show or hide the placeholder text as
+     * necessary.
+     *
+     * @return void
+     * @task internal
+     */
+    updatePlaceholder : function() {
+
+      if (this._placeholderVisible) {
+        // If the placeholder is visible, we want to hide if the control has
+        // been focused or the placeholder has been removed.
+        if (this._focused || !this._placeholder) {
+          this._placeholderVisible = false;
+          this._control.value = '';
+        }
+      } else if (!this._focused) {
+        // If the placeholder is not visible, we want to show it if the control
+        // has benen blurred.
+        if (this._placeholder && !this._control.value) {
+          this._placeholderVisible = true;
+        }
+      }
+
+      if (this._placeholderVisible) {
+        // We need to resist the Tokenizer wiping the input on blur.
+        this._control.value = this._placeholder;
+      }
+
+      JX.DOM.alterClass(
+        this._control,
+        'jx-typeahead-placeholder',
+        this._placeholderVisible);
     }
   }
 });

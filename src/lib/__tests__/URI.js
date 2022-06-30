@@ -4,9 +4,10 @@
 describe('Javelin URI', function() {
 
   it('should understand parts of a uri', function() {
-    var uri = JX.$U('http://www.facebook.com/home.php?key=value#fragment');
+    var uri = JX.$U('http://www.facebook.com:123/home.php?key=value#fragment');
     expect(uri.getProtocol()).toEqual('http');
     expect(uri.getDomain()).toEqual('www.facebook.com');
+    expect(uri.getPort()).toEqual('123');
     expect(uri.getPath()).toEqual('/home.php');
     expect(uri.getQueryParams()).toEqual({'key' : 'value'});
     expect(uri.getFragment()).toEqual('fragment');
@@ -261,7 +262,7 @@ describe('Javelin URI', function() {
     expect(uri.toString()).toEqual('/?clown=town');
   });
 
-  it('can remove non existant query data', function() {
+  it('can remove non existent query data', function() {
     var uri = JX.$U('/?key=value');
     uri.addQueryParams({'magic' : null});
     expect(uri.getQueryParams()).toEqual({
@@ -288,5 +289,14 @@ describe('Javelin URI', function() {
     expect(uri2.getQueryParams()).not.toEqual({'key' : 'value'});
   });
 
-});
+  it('should not loop indefinitely when parsing empty params', function() {
+    expect(JX.$U('/?&key=value').getQueryParams()).toEqual({'key' : 'value'});
+    expect(JX.$U('/?&&&key=value').getQueryParams()).toEqual({'key' : 'value'});
+    expect(JX.$U('/?&&').getQueryParams()).toEqual({});
+  });
 
+  it('should parse values with =', function() {
+    expect(JX.$U('/?x=1=1').getQueryParams()).toEqual({'x' : '1=1'});
+  });
+
+});

@@ -26,20 +26,53 @@ JX.install('Resource', {
      */
     load: function(list, callback) {
       var resources = {},
-        uri, resource, path, type;
+        uri, resource, path, is_css;
 
       list = JX.$AX(list);
+
+      // In the event there are no resources to wait on, call the callback and
+      // exit. NOTE: it's better to do this check outside this function and not
+      // call through JX.Resource, but it's not always easy/possible to do so
+      if (!list.length) {
+        setTimeout(callback, 0);
+        return;
+      }
+
       for (var ii = 0; ii < list.length; ii++) {
         uri = new JX.URI(list[ii]);
         resource = uri.toString();
         path = uri.getPath();
+
+        is_css = false;
+        if (path.indexOf('.css') == path.length - 4) {
+          is_css = true;
+        }
+
+        // During initialization, resource paths are pulled directly out of the
+        // elements in the <head>. The browser can munge these from what the
+        // literal URIs are in the HTML; in particular, it tends to include the
+        // domain. So that we can allow clients to specify URIs consistently,
+        // not worrying about this behavior, run the URI through the same
+        // browser munging path that it would have gone through had it come out
+        // of the <head> in the first place, so everything matches and we don't
+        // double-load resources.
+        if (is_css) {
+          var normalizing_elem = document.createElement('link');
+          normalizing_elem.href = resource;
+          resource = normalizing_elem.href;
+        } else {
+          var normalizing_elem = document.createElement('script');
+          normalizing_elem.src = resource;
+          resource = normalizing_elem.src;
+        }
+
         resources[resource] = true;
 
         if (JX.Resource._loaded[resource]) {
           setTimeout(JX.bind(JX.Resource, JX.Resource._complete, resource), 0);
         } else if (!JX.Resource._loading[resource]) {
           JX.Resource._loading[resource] = true;
-          if (path.indexOf('.css') == path.length - 4) {
+          if (is_css) {
             JX.Resource._loadCSS(resource);
           } else {
             JX.Resource._loadJS(resource);
@@ -55,20 +88,24 @@ JX.install('Resource', {
 
     _loadJS: function(uri) {
       var script = document.createElement('script');
-      var callback = function() {
-        this.onload = this.onerror = this.onreadystatechange = null;
+      var load_callback = function() {
         JX.Resource._complete(uri);
+      };
+      var error_callback = function() {
+        JX.$E('Resource: JS file download failure: ' + uri);
       };
 
       JX.copy(script, {
         type: 'text/javascript',
         src: uri
       });
-      script.onload = script.onerror = callback;
+
+      script.onload = load_callback;
+      script.onerror = error_callback;
       script.onreadystatechange = function() {
         var state = this.readyState;
         if (state == 'complete' || state == 'loaded') {
-          callback();
+          load_callback();
         }
       };
       document.getElementsByTagName('head')[0].appendChild(script);
@@ -103,8 +140,11 @@ JX.install('Resource', {
         if (owner) {
           while (jj--) {
             if (owner == links[jj]) {
-              JX.Resource._complete(links[jj]['data-href']);
-              links.splice(jj, 1);
+              try {
+                JX.Resource._complete(links[jj]['data-href']);
+              } finally {
+                links.splice(jj, 1);
+              }
             }
           }
         }
@@ -127,8 +167,11 @@ JX.install('Resource', {
         current = list[ii];
         delete current.resources[uri];
         if (!JX.Resource._hasResources(current.resources)) {
-          current.callback();
-          list.splice(ii--, 1);
+          try {
+            current.callback();
+          } finally {
+            list.splice(ii--, 1);
+          }
         }
       }
     },

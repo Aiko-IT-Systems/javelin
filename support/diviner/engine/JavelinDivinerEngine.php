@@ -127,15 +127,16 @@ class JavelinDivinerEngine extends DivinerEngine {
           foreach ($atom->getParameters() as $param => $dict) {
             $doc = array_shift($docs);
             if ($doc) {
-              $split = preg_split('/\s+/', trim($doc), $limit = 2);
-              if (!empty($split[0])) {
-                $dict['doctype'] = $split[0];
-              }
-              if (!empty($split[1])) {
-                $dict['docs'] = $split[1];
-              }
+              $dict += $this->parseParamDoc($doc);
             }
             $atom->addParameter($param, $dict);
+          }
+
+          // Add extra parameters retrieved by arguments variable.
+          foreach ($docs as $doc) {
+            if ($doc) {
+              $atom->addParameter('', $this->parseParamDoc($doc));
+            }
           }
         }
 
@@ -309,7 +310,7 @@ class JavelinDivinerEngine extends DivinerEngine {
 
   protected function failParse(array $ast, $reason) {
     throw new Exception(
-      "Parsing failed at line ".$this->getNodeLine($ast).": ".$reason);
+      'Parsing failed at line '.$this->getNodeLine($ast).': '.$reason);
   }
 
   protected function getObjectLiteralPropertyLine(array $ast, $property) {

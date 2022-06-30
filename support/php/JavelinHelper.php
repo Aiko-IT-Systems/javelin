@@ -5,7 +5,7 @@
  * tags with Javelin metadata, and produce Ajax responses in the format Javelin
  * understands.
  */
-class Javelin {
+class JavelinHelper {
 
   protected static $instance = null;
 
@@ -79,7 +79,7 @@ class Javelin {
 
     if ($javelin->behavior) {
       $behavior = json_encode($javelin->behavior);
-      Javelin::onload('JX.initBehaviors('.$behavior.')');
+      JavelinHelper::onload('JX.initBehaviors('.$behavior.')');
       $javelin->behavior = array();
     }
 
@@ -119,9 +119,9 @@ class Javelin {
 
     if ($javelin->onload) {
       throw new Exception(
-        "Javelin onload functions have been registered, but the response is ".
-        "being rendered as an Ajax response. This is invalid; use behaviors ".
-        "instead.");
+        'Javelin onload functions have been registered, but the response is '.
+        'being rendered as an Ajax response. This is invalid; use behaviors '.
+        'instead.');
     }
 
     $javelin->dirty = false;
@@ -139,17 +139,16 @@ class Javelin {
   public function __destruct() {
     if ($this->dirty) {
       throw new Exception(
-        "Javelin has behaviors, metadata or onload functions to include in ".
-        "the response but you did not call renderHTMLFooter() or ".
-        "renderAjaxResponse() after registering them.");
+        'Javelin has behaviors, metadata or onload functions to include in '.
+        'the response but you did not call renderHTMLFooter() or '.
+        'renderAjaxResponse() after registering them.');
     }
   }
 
   protected static function getInstance() {
     if (empty(self::$instance)) {
-      self::$instance = new Javelin();
+      self::$instance = new JavelinHelper();
     }
     return self::$instance;
   }
 }
-

@@ -35,6 +35,13 @@ JX.install('Tokenizer', {
     this._containerNode = containerNode;
   },
 
+  events : [
+    /**
+     * Emitted when the value of the tokenizer changes, similar to an 'onchange'
+     * from a <select />.
+     */
+    'change'],
+
   properties : {
     limit : null,
     nextInput : null
@@ -52,6 +59,7 @@ JX.install('Tokenizer', {
     _initialValue : null,
     _seq : 0,
     _lastvalue : null,
+    _placeholder : null,
 
     start : function() {
       if (__DEV__) {
@@ -91,7 +99,7 @@ JX.install('Tokenizer', {
           this,
           function(e) {
             if (e.getNode('remove')) {
-              this._remove(e.getNodeData('token').key);
+              this._remove(e.getNodeData('token').key, true);
             } else if (e.getTarget() == this._root) {
               this.focus();
             }
@@ -142,7 +150,7 @@ JX.install('Tokenizer', {
             if (this.shouldHideResultsOnChoose()) {
               this._typeahead.hide();
             }
-            this._focus.value = '';
+            this._typeahead.clear();
             this._redraw();
             this.focus();
           }
@@ -198,7 +206,12 @@ JX.install('Tokenizer', {
       } else if (e.getType() == 'keydown') {
         this._onkeydown(e);
       } else if (e.getType() == 'blur') {
+        this._focus.value = '';
         this._redraw();
+
+        // Explicitly update the placeholder since we just wiped the field
+        // value.
+        this._typeahead.updatePlaceholder();
       }
     },
 
@@ -208,6 +221,15 @@ JX.install('Tokenizer', {
     },
 
     _redraw : function(force) {
+
+      // If there are tokens in the tokenizer, never show a placeholder.
+      // Otherwise, show one if one is configured.
+      if (JX.keys(this._tokenMap).length) {
+        this._typeahead.setPlaceholder(null);
+      } else {
+        this._typeahead.setPlaceholder(this._placeholder);
+      }
+
       var focus = this._focus;
 
       if (focus.value === this._lastvalue && !force) {
@@ -229,6 +251,11 @@ JX.install('Tokenizer', {
       focus.value = focus.value;
     },
 
+    setPlaceholder : function(string) {
+      this._placeholder = string;
+      return this;
+    },
+
     addToken : function(key, value) {
       if (key in this._tokenMap) {
         return false;
@@ -247,7 +274,13 @@ JX.install('Tokenizer', {
 
       root.insertBefore(token, focus);
 
+      this.invoke('change', this);
+
       return true;
+    },
+
+    removeToken : function(key) {
+      return this._remove(key, false);
     },
 
     buildInput: function(value) {
@@ -309,7 +342,7 @@ JX.install('Tokenizer', {
           if (!this._focus.value.length) {
             var tok;
             while (tok = this._tokens.pop()) {
-              if (this._remove(tok)) {
+              if (this._remove(tok, true)) {
                 break;
               }
             }
@@ -328,14 +361,17 @@ JX.install('Tokenizer', {
       }
     },
 
-    _remove : function(index) {
+    _remove : function(index, focus) {
       if (!this._tokenMap[index]) {
         return false;
       }
       JX.DOM.remove(this._tokenMap[index].node);
       delete this._tokenMap[index];
       this._redraw(true);
-      this.focus();
+      focus && this.focus();
+
+      this.invoke('change', this);
+
       return true;
     },
 
